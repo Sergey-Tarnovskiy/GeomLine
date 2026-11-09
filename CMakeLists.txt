@@ -9,7 +9,7 @@ find_package(OpenGL REQUIRED)
 
 include(FetchContent)
 
-# 1. Скачиваем GLFW
+# Download GLFW.
 FetchContent_Declare(
     glfw
     GIT_REPOSITORY https://github.com/glfw/glfw.git
@@ -20,15 +20,15 @@ set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(glfw)
 
-# 2. Скачиваем Dear ImGui
+# Download Dear ImGui.
 FetchContent_Declare(
     imgui
     GIT_REPOSITORY https://github.com/ocornut/imgui.git
-    GIT_TAG        docking # или v1.91.5
+    GIT_TAG        5c7c293a66d7a659d4e6a1abdf18291ce004c07e # Pinned Dear ImGui revision.
 )
 FetchContent_MakeAvailable(imgui)
 
-# Собираем ImGui как статическую библиотеку с нужными бэкендами
+# Build ImGui with the GLFW and OpenGL backends.
 add_library(imgui_lib STATIC
     ${imgui_SOURCE_DIR}/imgui.cpp
     ${imgui_SOURCE_DIR}/imgui_draw.cpp
@@ -38,13 +38,13 @@ add_library(imgui_lib STATIC
     ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
 )
-target_include_directories(imgui_lib PUBLIC 
-    ${imgui_SOURCE_DIR} 
+target_include_directories(imgui_lib PUBLIC
+    ${imgui_SOURCE_DIR}
     ${imgui_SOURCE_DIR}/backends
 )
 target_link_libraries(imgui_lib PUBLIC glfw OpenGL::GL)
 
-# 3. Исполняемый файл
+# Application executable.
 add_executable(app
     Source/main.cpp
     Source/geometry.cpp
@@ -55,3 +55,11 @@ target_link_libraries(app PRIVATE
     OpenMP::OpenMP_CXX
     imgui_lib
 )
+
+include(CTest)
+if(BUILD_TESTING)
+    add_executable(solver_tests Tests/solvers.cpp Source/geometry.cpp)
+    target_include_directories(solver_tests PRIVATE Source)
+    target_link_libraries(solver_tests PRIVATE OpenMP::OpenMP_CXX)
+    add_test(NAME solver_consistency COMMAND solver_tests)
+endif()

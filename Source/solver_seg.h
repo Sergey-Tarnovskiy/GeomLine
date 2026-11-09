@@ -4,11 +4,14 @@
 #include <chrono>
 #include "geometry.h"
 
+
+// Sequential intersection search result.
 struct SequentialResult {
-    std::vector<Point> intersections;
-    double elapsed_ms = 0.0;
+    std::vector<Point> intersections; // One point per intersecting segment pair.
+    double elapsed_ms = 0.0;          // Elapsed time in milliseconds.
 };
 
+// Sequential all-pairs intersection search.
 class SequentialSolver {
 public:
     static SequentialResult solve(const std::vector<Segment>& segments) {
@@ -20,7 +23,7 @@ public:
 
         auto start_time = std::chrono::high_resolution_clock::now();
 
-        // Наивный перебор пар O(N^2) с фильтрацией через AABB в find_intersection
+        // Test every pair of segments.
         for (size_t i = 0; i < n; ++i) {
             for (size_t j = i + 1; j < n; ++j) {
                 auto pt = find_intersection(segments[i], segments[j]);

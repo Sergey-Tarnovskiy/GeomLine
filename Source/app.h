@@ -1,18 +1,16 @@
 #pragma once
 
-#include <iostream>
 #include <vector>
 #include <string>
-#include <algorithm>
-#include <cmath>
 #include <iomanip>
 #include <sstream>
+#include <utility>
+#include "geometry.h"
 #include "generator.h"
 #include "solver_seg.h"
 #include "solver_grid.h"
 #include "solver_mid.h"
 #include <imgui.h>
-#include "geometry.h"
 
 struct AppConsole {
     std::vector<std::string> lines;
@@ -74,7 +72,7 @@ struct AppState {
 
         console.add_log("==========================================================================");
         console.add_log("[Scaling Benchmark] Variable Threads, Fixed Segments: " + std::to_string(segments.size()));
-        
+
         auto seq_res = SequentialSolver::solve(segments);
         double t_seq = seq_res.elapsed_ms;
         size_t base_pts = seq_res.intersections.size();
@@ -83,9 +81,9 @@ struct AppState {
         ss_head << std::fixed << std::setprecision(2);
         ss_head << "[Seq Base] Time: " << t_seq << " ms | Intersections: " << base_pts;
         console.add_log(ss_head.str());
-        console.add_log("--------------------------------------------------------------------------");
-        console.add_log(" Th | Grid Time (ms) | Grid S  | Grid E%  | RCB Time (ms)  | RCB S   | RCB E%  ");
-        console.add_log("----+----------------+---------+----------+----------------+---------+---------");
+        console.add_log("----------------------------------------");
+        console.add_log(" Th | Grid Time (ms)  | Smart Time (ms)|");
+        console.add_log("----+-----------------+----------------+");
 
         std::vector<int> thread_levels;
         for (int t = 1; t <= bench_threads_max; t = (t == 1 ? 2 : t + 2)) {
@@ -97,37 +95,29 @@ struct AppState {
 
         for (int t : thread_levels) {
             auto g_res = UniformGridSolver::solve(segments, t);
-            double s_grid = (g_res.elapsed_ms > 0.0) ? (t_seq / g_res.elapsed_ms) : 0.0;
-            double e_grid = (s_grid / t) * 100.0;
+            auto smart_res = SmartSolver::solve(segments, t);
 
-            auto rcb_res = RCBSolver::solve(segments, t);
-            double s_rcb = (rcb_res.elapsed_ms > 0.0) ? (t_seq / rcb_res.elapsed_ms) : 0.0;
-            double e_rcb = (s_rcb / t) * 100.0;
 
             std::ostringstream ss_row;
             ss_row << std::fixed << std::setprecision(2);
             ss_row << " " << std::setw(2) << t << " | "
                    << std::setw(14) << g_res.elapsed_ms << " | "
-                   << std::setw(6) << s_grid << "x | "
-                   << std::setw(7) << e_grid << "% | "
-                   << std::setw(14) << rcb_res.elapsed_ms << " | "
-                   << std::setw(6) << s_rcb << "x | "
-                   << std::setw(6) << e_rcb << "%";
+                   << std::setw(14) << smart_res.elapsed_ms << " | ";
 
-            if (g_res.intersections.size() != base_pts || rcb_res.intersections.size() != base_pts) {
+            if (g_res.intersections.size() != base_pts || smart_res.intersections.size() != base_pts) {
                 ss_row << " [WARN: DIFF]";
             }
 
             console.add_log(ss_row.str());
         }
-        console.add_log("==========================================================================");
+        console.add_log("============================================================");
     }
 
     void run_size_scaling_benchmark() {
-        console.add_log("==========================================================================");
+        console.add_log("===========================================================");
         console.add_log("[Size Benchmark] Variable Segments, Fixed Threads: " + std::to_string(thread_count));
-        console.add_log("    N | Seq Time (ms)  | Grid Time (ms) | Grid S  | RCB Time (ms)  | RCB S   ");
-        console.add_log("------+----------------+----------------+---------+----------------+---------");
+        console.add_log("    N | Seq Time (ms)  | Grid Time (ms) | Smart Time (ms)  ");
+        console.add_log("------+----------------+----------------+------------------");
 
         DistributionType type = (distribution_mode == 0) ? DistributionType::Uniform : DistributionType::Clustered;
 
@@ -135,26 +125,20 @@ struct AppState {
             auto test_segs = SegmentGenerator::generate(n, type);
 
             auto seq_res = SequentialSolver::solve(test_segs);
-            double t_seq = seq_res.elapsed_ms;
 
             auto g_res = UniformGridSolver::solve(test_segs, thread_count);
-            double s_grid = (g_res.elapsed_ms > 0.0) ? (t_seq / g_res.elapsed_ms) : 0.0;
 
-            auto rcb_res = RCBSolver::solve(test_segs, thread_count);
-            double s_rcb = (rcb_res.elapsed_ms > 0.0) ? (t_seq / rcb_res.elapsed_ms) : 0.0;
+            auto smart_res = SmartSolver::solve(test_segs, thread_count);
 
             std::ostringstream ss_row;
             ss_row << std::fixed << std::setprecision(2);
             ss_row << " " << std::setw(4) << n << " | "
-                   << std::setw(14) << t_seq << " | "
+                   << std::setw(14) << seq_res.elapsed_ms << " | "
                    << std::setw(14) << g_res.elapsed_ms << " | "
-                   << std::setw(6) << s_grid << "x | "
-                   << std::setw(14) << rcb_res.elapsed_ms << " | "
-                   << std::setw(6) << s_rcb << "x";
-
+                   << std::setw(14) << smart_res.elapsed_ms << " | ";
             console.add_log(ss_row.str());
         }
-        console.add_log("==========================================================================");
+        console.add_log("==========================================================");
     }
 
     void init() {
@@ -171,7 +155,7 @@ struct AppState {
         ImGui::Combo("Distribution", &distribution_mode, dist_names, IM_ARRAYSIZE(dist_names));
 
         float btn_w = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
-        if (ImGui::Button("Generate Curves", ImVec2(btn_w, 0))) {
+        if (ImGui::Button("Generate Segments", ImVec2(btn_w, 0))) {
             segments.clear();
             intersection_points.clear();
             debug_grid.clear();
@@ -179,13 +163,13 @@ struct AppState {
             DistributionType type = (distribution_mode == 0) ? DistributionType::Uniform : DistributionType::Clustered;
             segments = SegmentGenerator::generate(segment_count, type);
 
-            console.add_log(std::string("[Generation] Created ") + 
-                            std::to_string(segments.size()) + " segments (" + 
+            console.add_log(std::string("[Generation] Created ") +
+                            std::to_string(segments.size()) + " segments (" +
                             dist_names[distribution_mode] + ").");
         }
 
         ImGui::SameLine();
-        if (ImGui::Button("Clear Curves", ImVec2(btn_w, 0))) {
+        if (ImGui::Button("Clear Segments", ImVec2(btn_w, 0))) {
             segments.clear();
             intersection_points.clear();
             debug_grid.clear();
@@ -232,20 +216,20 @@ struct AppState {
             }
         }
 
-        if (ImGui::Button("Smart Partitioning (Median)", ImVec2(-1, 32))) {
+        if (ImGui::Button("Smart Partitioning", ImVec2(-1, 32))) {
             debug_grid.clear();
             intersection_points.clear();
 
             if (segments.empty()) {
                 console.add_log("[Warning] Generate segments first!");
             } else {
-                auto res = RCBSolver::solve(segments, thread_count);
+                auto res = SmartSolver::solve(segments, thread_count);
                 intersection_points = std::move(res.intersections);
                 debug_grid = std::move(res.grid_cells);
 
                 std::ostringstream ss;
                 ss << std::fixed << std::setprecision(3);
-                ss << "[RCB Solver] Found: " << intersection_points.size()
+                ss << "[Smart Solver] Found: " << intersection_points.size()
                    << " points | Cells: " << debug_grid.size()
                    << " | Time: " << res.elapsed_ms << " ms";
                 console.add_log(ss.str());
@@ -260,20 +244,17 @@ struct AppState {
             } else {
                 auto seq_res = SequentialSolver::solve(segments);
                 auto g_res = UniformGridSolver::solve(segments, thread_count);
-                auto rcb_res = RCBSolver::solve(segments, thread_count);
-
-                double s_g = (g_res.elapsed_ms > 0.0) ? (seq_res.elapsed_ms / g_res.elapsed_ms) : 0.0;
-                double s_rcb = (rcb_res.elapsed_ms > 0.0) ? (seq_res.elapsed_ms / rcb_res.elapsed_ms) : 0.0;
+                auto sm_res = SmartSolver::solve(segments, thread_count);
 
                 std::ostringstream ss;
                 ss << std::fixed << std::setprecision(2);
                 ss << "[Quick] Seg: " << seq_res.elapsed_ms << "ms | "
-                   << "Grid: " << g_res.elapsed_ms << "ms (" << s_g << "x) | "
-                   << "RCB: " << rcb_res.elapsed_ms << "ms (" << s_rcb << "x)";
+                   << "Grid: " << g_res.elapsed_ms << "ms | "
+                   << "Smart: " << sm_res.elapsed_ms << "ms | ";
                 console.add_log(ss.str());
 
-                intersection_points = std::move(rcb_res.intersections);
-                debug_grid = std::move(rcb_res.grid_cells);
+                intersection_points = std::move(sm_res.intersections);
+                debug_grid = std::move(sm_res.grid_cells);
             }
         }
 
@@ -303,7 +284,7 @@ struct AppState {
         ImVec2 canvas_p0 = ImGui::GetCursorScreenPos();
         ImVec2 canvas_sz = ImGui::GetContentRegionAvail();
 
-        // Заполняем всю область окна с отступом 4px
+        // Fill the window area with a four-pixel inset.
         float side_x = canvas_sz.x - 4.0f;
         float side_y = canvas_sz.y - 4.0f;
         ImVec2 canvas_p1 = ImVec2(canvas_p0.x + side_x, canvas_p0.y + side_y);
@@ -343,22 +324,22 @@ struct AppState {
         float screen_h = io.DisplaySize.y;
 
         float pad = 10.0f;
-        float left_panel_w = 460.0f; // Увеличенная ширина левой колонки
+        float left_panel_w = 460.0f; // Left column width.
 
         float control_h = 570.0f;
         float console_h = screen_h - control_h - 3.0f * pad;
 
-        // 1. Control Panel
+        // Control panel.
         ImGui::SetNextWindowPos(ImVec2(pad, pad), ImGuiCond_Always);
         ImGui::SetNextWindowSize(ImVec2(left_panel_w, control_h), ImGuiCond_Always);
         draw_control_panel();
 
-        // 2. Console Output
+        // Console output.
         ImGui::SetNextWindowPos(ImVec2(pad, pad * 2.0f + control_h), ImGuiCond_Always);
         ImGui::SetNextWindowSize(ImVec2(left_panel_w, console_h), ImGuiCond_Always);
         console.draw("Console Output");
 
-        // 3. Canvas на всё оставшееся пространство
+        // The canvas fills the remaining window area.
         float canvas_x = left_panel_w + 2.0f * pad;
         float canvas_w = screen_w - canvas_x - pad;
         float canvas_h = screen_h - 2.0f * pad;
